@@ -173,6 +173,7 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     subprocess.run(f"./xmlchange OCN_DOMAIN_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange ICE_DOMAIN_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange MASK_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
+    subprocess.run(f"./xmlchange MASK_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange RUN_REFDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange RUN_STARTDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     
