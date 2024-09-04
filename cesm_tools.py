@@ -137,20 +137,20 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     ny = int(len(expt.hgrid.ny) //2)
     # Copy the configuration files to the SourceMods folder
     for i in ["input.nml", "diag_table", "MOM_input", "MOM_override"]:
-        shutil.copy(Path(expt.mom_run_dir) / i, CESMPath / "SourceMods/src.drv")
+        shutil.copy(Path(expt.mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
     # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
-    with open(CESMPath / "SourceMods/src.drv/MOM_override", "a") as f:
-        f.write(f"#override NIGLOBAL = {nx}")
-        f.write(f"#override NJGLOBAL = {ny}")
-        f.write(f"#override INPUTDIR = {expt.mom_input_dir}")
+    with open(CESMPath / "SourceMods/src.mom/MOM_override", "a") as f:
+        f.write(f"#override NIGLOBAL = {nx}\n")
+        f.write(f"#override NJGLOBAL = {ny}\n")
+        f.write(f"#override INPUTDIR = {expt.mom_input_dir}\n")
         f.close()
 
     # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
-    with open(CESMPath / "SourceMods/src.drv/input.nml", "r") as f:
+    with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
         lines = f.readlines()
         f.close()
-    with open(CESMPath / "SourceMods/src.drv/input.nml", "w") as f:
+    with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
         for line in lines:
             if "parameter_filename = 'MOM_input'" in line:
                 line = "parameter_filename = 'MOM_input', 'MOM_override'"
