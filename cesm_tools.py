@@ -151,14 +151,26 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
         lines = f.readlines()
         f.close()
     with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
-        for line in lines:
-            if "parameter_filename = 'MOM_input'" in line:
-                line = "parameter_filename = 'MOM_input', 'MOM_override'"
+        for i in range(len(lines)):
+            if "parameter_filename = 'MOM_input'" in lines[i]:
+                lines[i] = "parameter_filename = 'MOM_input', 'MOM_override'"
+        f.writelines(lines)
         f.close()
 
     # Move all of the forcing files out of the forcing directory to the main inputdir
     for i in expt.mom_input_dir.glob("forcing/*"):
         shutil.move(i, expt.mom_input_dir / i.name)
+
+    # Find and replace instances of forcing/ with nothing in the MOM_input file
+    with open(CESMPath / "SourceMods/src.mom/MOM_input", "r") as f:
+        lines = f.readlines()
+        f.close()
+    with open(CESMPath / "SourceMods/src.mom/MOM_input", "w") as f:
+        for i in range(len(lines)):
+            lines[i] = lines[i].replace("forcing/", "")
+            print(lines[i])
+        f.writelines(lines)
+        f.close()
 
     # shutil.rmtree(expt.mom_input_dir / "forcing")
 
@@ -177,4 +189,9 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     subprocess.run(f"./xmlchange RUN_REFDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange RUN_STARTDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     
+    # Now make symlinks from the CESM directory to the mom input directory and the CESM run directory
+    with CESMPath / "mom_input_directory" as link:
+        link.unlink(missing_ok=True)
+        link.symlink_to(expt.mom_input_dir)
+
     return 
