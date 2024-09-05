@@ -168,7 +168,6 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     with open(CESMPath / "SourceMods/src.mom/MOM_input", "w") as f:
         for i in range(len(lines)):
             lines[i] = lines[i].replace("forcing/", "")
-            print(lines[i])
         f.writelines(lines)
         f.close()
 
