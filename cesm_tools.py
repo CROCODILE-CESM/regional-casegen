@@ -7,7 +7,7 @@ import os
 import subprocess
 import regional_mom6 as rmom6
 
-def write_esmf_mesh(hgrid, ocean_mask,save_path, title=None,cyclic_x = False):
+def write_esmf_mesh(hgrid, bathymetry,save_path, title=None,cyclic_x = False):
     """
     Write the ESMF mesh file
 
@@ -69,8 +69,10 @@ def write_esmf_mesh(hgrid, ocean_mask,save_path, title=None,cyclic_x = False):
         attrs={"units": "m**2"}, # These units are hardcoded to match the regular mom6 hgrid
     )
 
+    ocean_mask = xr.where(bathymetry.depth.fillna(0) != 0,1,0)
+
     ds["elementMask"] = xr.DataArray(
-        ocean_mask.mask.values.astype(np.int32).flatten(), dims=["elementCount"]
+        ocean_mask.values.astype(np.int32).flatten(), dims=["elementCount"]
     )
 
     i0 = 1  # start index for node id's
@@ -124,7 +126,7 @@ def write_esmf_mesh(hgrid, ocean_mask,save_path, title=None,cyclic_x = False):
             "start_index": np.int32(i0),
         },
     )
-    ds.to_netcdf(save_path)
+    ds.to_netcdf(save_path,mode = "w")
 
     
 
@@ -174,7 +176,7 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     # shutil.rmtree(expt.mom_input_dir / "forcing")
 
     # Make ESMF grid and save to inputdir
-    write_esmf_mesh(expt.hgrid, xr.open_dataset(expt.mom_input_dir / "ocean_mask.nc"), expt.mom_input_dir / "esmf_mesh.nc", title="Regional MOM6 grid", cyclic_x = cyclic_x)
+    write_esmf_mesh(expt.hgrid, xr.open_dataset(expt.mom_input_dir / "bathymetry.nc"), expt.mom_input_dir / "esmf_mesh.nc", title="Regional MOM6 grid", cyclic_x = cyclic_x)
 
     # Make xml changes
 
