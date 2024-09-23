@@ -130,7 +130,7 @@ def write_esmf_mesh(hgrid, bathymetry,save_path, title=None,cyclic_x = False):
 
     
 
-def setup_cesm(expt,CESMPath,cyclic_x = False):
+def setup_cesm(expt,CESMPath,project,cyclic_x = False):
     """
     Given a regional-mom6 experiment object and a path to the CESM folder, this function makes all of the changes to the CESM configuration to get it to run with the regional configuration. 
     """
@@ -189,6 +189,9 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     subprocess.run(f"./xmlchange MASK_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange RUN_REFDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange RUN_STARTDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
+
+    subprocess.run(f"./xmlchange PROJECT={project}",shell = True,cwd = str(CESMPath))
+    subprocess.run(f"./xmlchange CHARGE_ACCOUNT={project}",shell = True,cwd = str(CESMPath))
     
     # Now make symlinks from the CESM directory to the mom input directory and the CESM run directory
     with CESMPath / "mom_input_directory" as link:
@@ -196,3 +199,8 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
         link.symlink_to(expt.mom_input_dir)
 
     return 
+
+
+# def regrid_marbl_forcing(expt,marbl_directory):
+
+    
