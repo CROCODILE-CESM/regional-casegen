@@ -138,10 +138,12 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     nx = int(len(expt.hgrid.nx) //2)
     ny = int(len(expt.hgrid.ny) //2)
     # Copy the configuration files to the SourceMods folder
+    print(f"Copying input.nml, diag_table, MOM_input_and MOM_override to {CESMPath / 'SourceMods/src.mom'}")
     for i in ["input.nml", "diag_table", "MOM_input", "MOM_override"]:
         shutil.copy(Path(expt.mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
     # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
+    print(f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {expt.mom_input_dir} to MOM_override")
     with open(CESMPath / "SourceMods/src.mom/MOM_override", "a") as f:
         f.write(f"#override NIGLOBAL = {nx}\n")
         f.write(f"#override NJGLOBAL = {ny}\n")
@@ -149,21 +151,26 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
         f.close()
 
     # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
+    print("Removing references to MOM_layout in input.nml")
     with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
         lines = f.readlines()
         f.close()
+
+    print("Add MOM_override to parameter_filename in input.nml")
     with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
         for i in range(len(lines)):
-            if "parameter_filename = 'MOM_input'" in lines[i]:
+            if 'parameter_filename' in lines[i] and 'MOM_layout' in lines[i]: 
                 lines[i] = "parameter_filename = 'MOM_input', 'MOM_override'"
         f.writelines(lines)
         f.close()
 
     # Move all of the forcing files out of the forcing directory to the main inputdir
+    print("Move all of the forcing files out of the forcing directory to the main inputdir")
     for i in expt.mom_input_dir.glob("forcing/*"):
         shutil.move(i, expt.mom_input_dir / i.name)
 
     # Find and replace instances of forcing/ with nothing in the MOM_input file
+    print("Find and replace instances of forcing/ with nothing in the MOM_input file")
     with open(CESMPath / "SourceMods/src.mom/MOM_input", "r") as f:
         lines = f.readlines()
         f.close()
@@ -173,13 +180,16 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
         f.writelines(lines)
         f.close()
 
-    # shutil.rmtree(expt.mom_input_dir / "forcing")
 
     # Make ESMF grid and save to inputdir
+    print("Make ESMF grid and save to inputdir")
     write_esmf_mesh(expt.hgrid, xr.open_dataset(expt.mom_input_dir / "bathymetry.nc"), expt.mom_input_dir / "esmf_mesh.nc", title="Regional MOM6 grid", cyclic_x = cyclic_x)
 
     # Make xml changes
-
+    print("Make xml changes. Setting OCN_NX={}, OCN_NY={}".format(nx,ny))
+    print("MOM6_MEMORY_MODE=dynamic_symmetric") 
+    print("OCN_DOMAIN_MESH, ICE_DOMAIN_MESH, MASK_MESH, MASK_GRID, OCN_GRID, ICE_GRID ={}".format(expt.mom_input_dir / 'esmf_mesh.nc'))
+    print("RUN_REFDATE, RUN_STARTDATE = {}".format(expt.date_range[0].strftime('%Y-%m-%d')))
     subprocess.run(f"./xmlchange OCN_NX={nx}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange OCN_NY={ny}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange MOM6_MEMORY_MODE=dynamic_symmetric",shell = True,cwd = str(CESMPath))
@@ -187,10 +197,14 @@ def setup_cesm(expt,CESMPath,cyclic_x = False):
     subprocess.run(f"./xmlchange ICE_DOMAIN_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange MASK_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange MASK_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
+    subprocess.run(f"./xmlchange OCN_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
+    subprocess.run(f"./xmlchange ICE_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",shell = True,cwd = str(CESMPath))
+
     subprocess.run(f"./xmlchange RUN_REFDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     subprocess.run(f"./xmlchange RUN_STARTDATE={expt.date_range[0].strftime('%Y-%m-%d')}",shell = True,cwd = str(CESMPath))
     
     # Now make symlinks from the CESM directory to the mom input directory and the CESM run directory
+    print("Make symlinks from the CESM directory to the mom input directory and the CESM run directory")
     with CESMPath / "mom_input_directory" as link:
         link.unlink(missing_ok=True)
         link.symlink_to(expt.mom_input_dir)
