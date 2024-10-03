@@ -180,6 +180,17 @@ def setup_cesm(expt,CESMPath,project,cyclic_x = False):
         f.writelines(lines)
         f.close()
 
+    # Find and replace instances of forcing/ with nothing in the MOM_input file
+    print("Find and replace instances of forcing/ with nothing in the MOM_input file")
+    with open(CESMPath / "SourceMods/src.mom/MOM_override", "r") as f:
+        lines = f.readlines()
+        f.close()
+    with open(CESMPath / "SourceMods/src.mom/MOM_override", "w") as f:
+        for i in range(len(lines)):
+            lines[i] = lines[i].replace("forcing/", "")
+        f.writelines(lines)
+        f.close()
+
 
     # Make ESMF grid and save to inputdir
     print("Make ESMF grid and save to inputdir")
