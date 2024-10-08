@@ -173,6 +173,15 @@ def setup_cesm(expt,CESMPath,project,cyclic_x = False):
         f.writelines(lines)
         f.close()
 
+        with open(CESMPath / "SourceMods/src.mom/MOM_override", "r") as f:
+        lines = f.readlines()
+        f.close()
+    with open(CESMPath / "SourceMods/src.mom/MOM_override", "w") as f:
+        for i in range(len(lines)):
+            lines[i] = lines[i].replace("forcing/", "")
+        f.writelines(lines)
+        f.close()
+
     # shutil.rmtree(expt.mom_input_dir / "forcing")
 
     # Make ESMF grid and save to inputdir
