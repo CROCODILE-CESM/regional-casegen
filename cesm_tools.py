@@ -79,7 +79,7 @@ class RegionalCaseGen:
             },  # These units are hardcoded to match the regular mom6 hgrid
         )
 
-        ocean_mask = xr.where(bathymetry.depth.fillna(0) != 0, 1, 0)
+        ocean_mask = xr.where(bathymetry.fillna(0) != 0, 1, 0)
 
         ds["elementMask"] = xr.DataArray(
             ocean_mask.values.astype(np.int32).flatten(), dims=["elementCount"]
@@ -158,16 +158,16 @@ class RegionalCaseGen:
             f"Copying input.nml, diag_table, MOM_input_and MOM_override to {CESMPath / 'SourceMods/src.mom'}"
         )
         for i in ["input.nml", "diag_table", "MOM_input", "MOM_override"]:
-            shutil.copy(Path(expt.mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
+            shutil.copy(Path(mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
         # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
         print(
-            f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {expt.mom_input_dir} to MOM_override"
+            f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {mom_input_dir} to MOM_override"
         )
         with open(CESMPath / "SourceMods/src.mom/MOM_override", "a") as f:
             f.write(f"#override NIGLOBAL = {nx}\n")
             f.write(f"#override NJGLOBAL = {ny}\n")
-            f.write(f"#override INPUTDIR = {expt.mom_input_dir}\n")
+            f.write(f"#override INPUTDIR = {mom_input_dir}\n")
             f.close()
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
@@ -188,8 +188,8 @@ class RegionalCaseGen:
         print(
             "Move all of the forcing files out of the forcing directory to the main inputdir"
         )
-        for i in expt.mom_input_dir.glob("forcing/*"):
-            shutil.move(i, expt.mom_input_dir / i.name)
+        for i in mom_input_dir.glob("forcing/*"):
+            shutil.move(i, mom_input_dir / i.name)
 
         # Find and replace instances of forcing/ with nothing in the MOM_input file
         print(
@@ -219,10 +219,10 @@ class RegionalCaseGen:
 
         # Make ESMF grid and save to inputdir
         print("Make ESMF grid and save to inputdir")
-        write_esmf_mesh(
-            expt.hgrid,
-            xr.open_dataset(expt.mom_input_dir / "bathymetry.nc"),
-            expt.mom_input_dir / "esmf_mesh.nc",
+        self.write_esmf_mesh(
+            hgrid,
+            xr.open_dataarray(mom_input_dir / "bathymetry.nc"),
+            mom_input_dir / "esmf_mesh.nc",
             title="Regional MOM6 grid",
             cyclic_x=cyclic_x,
         )
@@ -232,12 +232,12 @@ class RegionalCaseGen:
         print("MOM6_MEMORY_MODE=dynamic_symmetric")
         print(
             "OCN_DOMAIN_MESH, ICE_DOMAIN_MESH, MASK_MESH, MASK_GRID, OCN_GRID, ICE_GRID ={}".format(
-                expt.mom_input_dir / "esmf_mesh.nc"
+                mom_input_dir / "esmf_mesh.nc"
             )
         )
         print(
             "RUN_REFDATE, RUN_STARTDATE = {}".format(
-                expt.date_range[0].strftime("%Y-%m-%d")
+                date_range[0].strftime("%Y-%m-%d")
             )
         )
         subprocess.run(f"./xmlchange OCN_NX={nx}", shell=True, cwd=str(CESMPath))
@@ -248,43 +248,43 @@ class RegionalCaseGen:
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange OCN_DOMAIN_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",
+            f"./xmlchange OCN_DOMAIN_MESH={mom_input_dir / 'esmf_mesh.nc'}",
             shell=True,
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange ICE_DOMAIN_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",
+            f"./xmlchange ICE_DOMAIN_MESH={mom_input_dir / 'esmf_mesh.nc'}",
             shell=True,
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange MASK_MESH={expt.mom_input_dir / 'esmf_mesh.nc'}",
+            f"./xmlchange MASK_MESH={mom_input_dir / 'esmf_mesh.nc'}",
             shell=True,
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange MASK_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",
+            f"./xmlchange MASK_GRID={mom_input_dir / 'esmf_mesh.nc'}",
             shell=True,
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange OCN_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",
+            f"./xmlchange OCN_GRID={mom_input_dir / 'esmf_mesh.nc'}",
             shell=True,
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange ICE_GRID={expt.mom_input_dir / 'esmf_mesh.nc'}",
+            f"./xmlchange ICE_GRID={mom_input_dir / 'esmf_mesh.nc'}",
             shell=True,
             cwd=str(CESMPath),
         )
 
         subprocess.run(
-            f"./xmlchange RUN_REFDATE={expt.date_range[0].strftime('%Y-%m-%d')}",
+            f"./xmlchange RUN_REFDATE={date_range[0].strftime('%Y-%m-%d')}",
             shell=True,
             cwd=str(CESMPath),
         )
         subprocess.run(
-            f"./xmlchange RUN_STARTDATE={expt.date_range[0].strftime('%Y-%m-%d')}",
+            f"./xmlchange RUN_STARTDATE={date_range[0].strftime('%Y-%m-%d')}",
             shell=True,
             cwd=str(CESMPath),
         )
@@ -300,7 +300,7 @@ class RegionalCaseGen:
         )
         with CESMPath / "mom_input_directory" as link:
             link.unlink(missing_ok=True)
-            link.symlink_to(expt.mom_input_dir)
+            link.symlink_to(mom_input_dir)
 
         return
 
