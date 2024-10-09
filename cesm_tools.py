@@ -137,7 +137,17 @@ class RegionalCaseGen:
         )
         ds.to_netcdf(save_path, mode="w")
 
+
     def setup_cesm(
+            self,
+            expt,
+            CESMPath,
+            project,
+            cyclic_x = False
+    ):
+        return self.setup_cesm_explicit(expt.hgrid, CESMPath, project, expt.mom_input_dir, expt.mom_run_dir, expt.date_range, cyclic_x=cyclic_x)
+
+    def setup_cesm_explicit(
         self,
         hgrid,
         CESMPath,
@@ -236,9 +246,7 @@ class RegionalCaseGen:
             )
         )
         print(
-            "RUN_REFDATE, RUN_STARTDATE = {}".format(
-                date_range[0].strftime("%Y-%m-%d")
-            )
+            "RUN_REFDATE, RUN_STARTDATE = {}".format(date_range[0].strftime("%Y-%m-%d"))
         )
         subprocess.run(f"./xmlchange OCN_NX={nx}", shell=True, cwd=str(CESMPath))
         subprocess.run(f"./xmlchange OCN_NY={ny}", shell=True, cwd=str(CESMPath))
