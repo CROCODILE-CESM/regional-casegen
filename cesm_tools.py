@@ -137,15 +137,16 @@ class RegionalCaseGen:
         )
         ds.to_netcdf(save_path, mode="w")
 
-
-    def setup_cesm(
-            self,
-            expt,
+    def setup_cesm(self, expt, CESMPath, project, cyclic_x=False):
+        return self.setup_cesm_explicit(
+            expt.hgrid,
             CESMPath,
             project,
-            cyclic_x = False
-    ):
-        return self.setup_cesm_explicit(expt.hgrid, CESMPath, project, expt.mom_input_dir, expt.mom_run_dir, expt.date_range, cyclic_x=cyclic_x)
+            expt.mom_input_dir,
+            expt.mom_run_dir,
+            expt.date_range,
+            cyclic_x=cyclic_x,
+        )
 
     def setup_cesm_explicit(
         self,
