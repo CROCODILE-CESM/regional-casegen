@@ -145,6 +145,7 @@ class RegionalCaseGen:
             expt.mom_input_dir,
             expt.mom_run_dir,
             expt.date_range,
+            expt.mom_input_dir / "bathymetry.nc",
             cyclic_x=cyclic_x,
         )
 
@@ -156,6 +157,7 @@ class RegionalCaseGen:
         mom_input_dir,
         mom_run_dir,
         date_range,
+        bathymetry_path,
         cyclic_x=False,
     ):
         """
@@ -232,7 +234,7 @@ class RegionalCaseGen:
         print("Make ESMF grid and save to inputdir")
         self.write_esmf_mesh(
             hgrid,
-            xr.open_dataarray(mom_input_dir / "bathymetry.nc"),
+            xr.open_dataarray(bathymetry_path),
             mom_input_dir / "esmf_mesh.nc",
             title="Regional MOM6 grid",
             cyclic_x=cyclic_x,
