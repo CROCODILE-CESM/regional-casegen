@@ -5,6 +5,10 @@ from datetime import datetime
 import shutil
 import os
 import subprocess
+from ..rm6 import regional_mom6 as rm6
+from ..utils import setup_logger
+
+rcg_logger = setup_logger(__name__)
 
 
 class RegionalCaseGen:
@@ -167,29 +171,33 @@ class RegionalCaseGen:
         nx = int(len(hgrid.nx) // 2)
         ny = int(len(hgrid.ny) // 2)
         # Copy the configuration files to the SourceMods folder
-        print(
+        rcg_logger.info(
             f"Copying input.nml, diag_table, MOM_input_and MOM_override to {CESMPath / 'SourceMods/src.mom'}"
         )
         for i in ["input.nml", "diag_table", "MOM_input", "MOM_override"]:
             shutil.copy(Path(mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
         # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
-        print(
-            f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {mom_input_dir} to MOM_override"
+        self.change_MOM_parameter(
+            Path(Path(CESMPath) / "SourceMods/src.mom"), "NIGLOBAL", nx, override=True
         )
-        with open(CESMPath / "SourceMods/src.mom/MOM_override", "a") as f:
-            f.write(f"#override NIGLOBAL = {nx}\n")
-            f.write(f"#override NJGLOBAL = {ny}\n")
-            f.write(f"#override INPUTDIR = {mom_input_dir}\n")
-            f.close()
+        self.change_MOM_parameter(
+            Path(Path(CESMPath) / "SourceMods/src.mom"), "NJGLOBAL", ny, override=True
+        )
+        self.change_MOM_parameter(
+            Path(Path(CESMPath) / "SourceMods/src.mom"),
+            "INPUTDIR",
+            mom_input_dir,
+            override=True,
+        )
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
-        print("Removing references to MOM_layout in input.nml")
+        rcg_logger.info("Removing references to MOM_layout in input.nml")
         with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
             lines = f.readlines()
             f.close()
 
-        print("Add MOM_override to parameter_filename in input.nml")
+        rcg_logger.info("Add MOM_override to parameter_filename in input.nml")
         with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
             for i in range(len(lines)):
                 if "parameter_filename" in lines[i] and "MOM_layout" in lines[i]:
@@ -198,40 +206,39 @@ class RegionalCaseGen:
             f.close()
 
         # Move all of the forcing files out of the forcing directory to the main inputdir
-        print(
+        rcg_logger.info(
             "Move all of the forcing files out of the forcing directory to the main inputdir"
         )
         for i in mom_input_dir.glob("forcing/*"):
             shutil.move(i, mom_input_dir / i.name)
 
         # Find and replace instances of forcing/ with nothing in the MOM_input file
-        print(
+        rcg_logger.info(
             "Find and replace instances of forcing/ with nothing in the MOM_input file"
         )
-        with open(CESMPath / "SourceMods/src.mom/MOM_input", "r") as f:
-            lines = f.readlines()
-            f.close()
-        with open(CESMPath / "SourceMods/src.mom/MOM_input", "w") as f:
-            for i in range(len(lines)):
-                lines[i] = lines[i].replace("forcing/", "")
-            f.writelines(lines)
-            f.close()
-
-        # Find and replace instances of forcing/ with nothing in the MOM_input file
-        print(
-            "Find and replace instances of forcing/ with nothing in the MOM_input file"
+        MOM_input_dict = self.read_MOM_file_as_dict(
+            Path(Path(CESMPath) / "SourceMods/src.mom"), "MOM_input"
         )
-        with open(CESMPath / "SourceMods/src.mom/MOM_override", "r") as f:
-            lines = f.readlines()
-            f.close()
-        with open(CESMPath / "SourceMods/src.mom/MOM_override", "w") as f:
-            for i in range(len(lines)):
-                lines[i] = lines[i].replace("forcing/", "")
-            f.writelines(lines)
-            f.close()
+        MOM_override_dict = self.read_MOM_file_as_dict(
+            Path(Path(CESMPath) / "SourceMods/src.mom"), "MOM_override"
+        )
+        for key in MOM_input_dict.keys():
+            if "forcing/" in MOM_input_dict[key]:
+                MOM_input_dict[key]["value"] = MOM_input_dict[key]["value"].replace(
+                    "forcing/", ""
+                )
+        for key in MOM_override_dict.keys():
+            if "forcing/" in MOM_override_dict[key]:
+                MOM_override_dict[key]["value"] = MOM_override_dict[key][
+                    "value"
+                ].replace("forcing/", "")
+        self.write_MOM_file(Path(Path(CESMPath) / "SourceMods/src.mom"), MOM_input_dict)
+        self.write_MOM_file(
+            Path(Path(CESMPath) / "SourceMods/src.mom"), MOM_override_dict
+        )
 
         # Make ESMF grid and save to inputdir
-        print("Make ESMF grid and save to inputdir")
+        rcg_logger.info("Make ESMF grid and save to inputdir")
         self.write_esmf_mesh(
             hgrid,
             xr.open_dataarray(bathymetry_path),
@@ -241,72 +248,24 @@ class RegionalCaseGen:
         )
 
         # Make xml changes
-        print("Make xml changes. Setting OCN_NX={}, OCN_NY={}".format(nx, ny))
-        print("MOM6_MEMORY_MODE=dynamic_symmetric")
-        print(
-            "OCN_DOMAIN_MESH, ICE_DOMAIN_MESH, MASK_MESH, MASK_GRID, OCN_GRID, ICE_GRID ={}".format(
-                mom_input_dir / "esmf_mesh.nc"
-            )
+        self.xmlchange(CESMPath, "OCN_NX", str(nx))
+        self.xmlchange(CESMPath, "OCN_NY", str(ny))
+        self.xmlchange(CESMPath, "MOM6_MEMORY_MODE", "dynamic_symmetric")
+        self.xmlchange(CESMPath, "OCN_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "ICE_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "MASK_MESH", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "MASK_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "OCN_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "ICE_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "RUN_REFDATE", str(date_range[0].strftime("%Y-%m-%d")))
+        self.xmlchange(
+            CESMPath, "RUN_STARTDATE", str(date_range[0].strftime("%Y-%m-%d"))
         )
-        print(
-            "RUN_REFDATE, RUN_STARTDATE = {}".format(date_range[0].strftime("%Y-%m-%d"))
-        )
-        subprocess.run(f"./xmlchange OCN_NX={nx}", shell=True, cwd=str(CESMPath))
-        subprocess.run(f"./xmlchange OCN_NY={ny}", shell=True, cwd=str(CESMPath))
-        subprocess.run(
-            f"./xmlchange MOM6_MEMORY_MODE=dynamic_symmetric",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange OCN_DOMAIN_MESH={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange ICE_DOMAIN_MESH={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange MASK_MESH={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange MASK_GRID={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange OCN_GRID={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange ICE_GRID={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-
-        subprocess.run(
-            f"./xmlchange RUN_REFDATE={date_range[0].strftime('%Y-%m-%d')}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange RUN_STARTDATE={date_range[0].strftime('%Y-%m-%d')}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-
-        subprocess.run(f"./xmlchange PROJECT={project}", shell=True, cwd=str(CESMPath))
-        subprocess.run(
-            f"./xmlchange CHARGE_ACCOUNT={project}", shell=True, cwd=str(CESMPath)
-        )
+        self.xmlchange(CESMPath, "PROJECT", str(project))
+        self.xmlchange(CESMPath, "CHARGE_ACCOUNT", str(project))
 
         # Now make symlinks from the CESM directory to the mom input directory and the CESM run directory
-        print(
+        rcg_logger.info(
             "Make symlinks from the CESM directory to the mom input directory and the CESM run directory"
         )
         with CESMPath / "mom_input_directory" as link:
@@ -315,4 +274,36 @@ class RegionalCaseGen:
 
         return
 
-    # def regrid_marbl_forcing(expt,marbl_directory):
+    def xmlchange(self, CESM_path, param_name, param_value):
+        rcg_logger.info(f"XML Change {param_name} to {param_value}!")
+        return subprocess.run(
+            f"./xmlchange {param_name}={param_value}",
+            shell=True,
+            cwd=str(CESM_path),
+        )
+
+    def read_MOM_file_as_dict(self, file_dir, filename):
+        expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
+        return expt.read_MOM_file_as_dict(filename)
+
+    def write_MOM_file(self, file_dir, dict):
+        expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
+        return expt.write_MOM_file(dict)
+
+    def change_MOM_parameter(
+        self,
+        file_dir,
+        param_name,
+        param_value=None,
+        override=True,
+        comment=None,
+        delete=False,
+    ):
+        expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
+        expt.change_MOM_parameter(
+            param_name,
+            param_value=param_value,
+            override=override,
+            comment=comment,
+            delete=delete,
+        )
