@@ -7,7 +7,6 @@ import os
 import subprocess
 import logging
 
-
 rcg_logger = logging.Logger(__name__) # this should be replaced by a workflow utils
 
 
