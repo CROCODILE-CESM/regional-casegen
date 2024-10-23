@@ -7,7 +7,7 @@ import os
 import subprocess
 import logging
 
-rcg_logger = logging.Logger(__name__)
+rcg_logger = logging.Logger(__name__) # this should be replaced by a workflow utils
 
 
 class RegionalCaseGen:
@@ -178,7 +178,7 @@ class RegionalCaseGen:
         for i in ["input.nml", "diag_table", "MOM_input", "MOM_override"]:
             shutil.copy(Path(mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
-        # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
+        # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs - This can be replaced by the MOM_param functions once we have move it.
         rcg_logger.info(
             f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {mom_input_dir} to MOM_override"
         )
@@ -189,11 +189,6 @@ class RegionalCaseGen:
             f.close()
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
-        rcg_logger.info("Removing references to MOM_layout in input.nml")
-        with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
-            lines = f.readlines()
-            f.close()
-
         rcg_logger.info("Add MOM_override to parameter_filename in input.nml")
         self.edit_input_nml_for_CESM(CESMPath, condition_strings=["MOM_layout", "parameter_filename"], new_string="parameter_filename = 'MOM_input', 'MOM_override'")
 
@@ -204,7 +199,7 @@ class RegionalCaseGen:
         for i in mom_input_dir.glob("forcing/*"):
             shutil.move(i, mom_input_dir / i.name)
 
-        # Find and replace instances of forcing/ with nothing in the MOM_input file
+        # Find and replace instances of forcing/ with nothing in the MOM_input file - This can be replaced by the MOM_param functions once we have move it.
         rcg_logger.info(
             "Find and replace instances of forcing/ with nothing in the MOM_input file"
         )
@@ -227,20 +222,6 @@ class RegionalCaseGen:
             cyclic_x=cyclic_x,
         )
 
-        # Load Balancing Math
-        total_number_of_points = nx * ny
-        nodes=1
-        pts_per_processor = total_number_of_points/ float(processors_per_node)
-        while not pts_per_processor < ideal_number_of_points_per_core_ceiling:
-            pts_per_processor = total_number_of_points / float(processors_per_node * nodes)
-            nodes = nodes+1
-        
-
-        # Avoid one node for all other components in ocean_only mode
-        self.xmlchange(CESMPath, "ROOTPE_OCN", str(processors_per_node))
-
-        # Set the number of processors
-        self.xmlchange(CESMPath, "NTASKS_OCN", nodes*processors_per_node)
 
 
         # Make xml changes
