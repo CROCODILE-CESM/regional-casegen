@@ -5,10 +5,9 @@ from datetime import datetime
 import shutil
 import os
 import subprocess
-from ..rm6 import regional_mom6 as rm6
-from ..utils import setup_logger
+import logging
 
-rcg_logger = setup_logger(__name__)
+rcg_logger = logging.Logger(__name__)
 
 
 class RegionalCaseGen:
@@ -180,20 +179,22 @@ class RegionalCaseGen:
             shutil.copy(Path(mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
         # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
-        self.change_MOM_parameter(
-            Path(Path(CESMPath) / "SourceMods/src.mom"), "NIGLOBAL", nx, override=True
+        rcg_logger.info(
+            f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {mom_input_dir} to MOM_override"
         )
-        self.change_MOM_parameter(
-            Path(Path(CESMPath) / "SourceMods/src.mom"), "NJGLOBAL", ny, override=True
-        )
-        self.change_MOM_parameter(
-            Path(Path(CESMPath) / "SourceMods/src.mom"),
-            "INPUTDIR",
-            mom_input_dir,
-            override=True,
-        )
+        with open(CESMPath / "SourceMods/src.mom/MOM_override", "a") as f:
+            f.write(f"#override NIGLOBAL = {nx}\n")
+            f.write(f"#override NJGLOBAL = {ny}\n")
+            f.write(f"#override INPUTDIR = {mom_input_dir}\n")
+            f.close()
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
+        rcg_logger.info("Removing references to MOM_layout in input.nml")
+        with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
+            lines = f.readlines()
+            f.close()
+
+        rcg_logger.info("Add MOM_override to parameter_filename in input.nml")
         self.edit_input_nml_for_CESM(CESMPath, condition_strings=["MOM_layout", "parameter_filename"], new_string="parameter_filename = 'MOM_input', 'MOM_override'")
 
         # Move all of the forcing files out of the forcing directory to the main inputdir
@@ -207,26 +208,14 @@ class RegionalCaseGen:
         rcg_logger.info(
             "Find and replace instances of forcing/ with nothing in the MOM_input file"
         )
-        MOM_input_dict = self.read_MOM_file_as_dict(
-            Path(Path(CESMPath) / "SourceMods/src.mom"), "MOM_input"
-        )
-        MOM_override_dict = self.read_MOM_file_as_dict(
-            Path(Path(CESMPath) / "SourceMods/src.mom"), "MOM_override"
-        )
-        for key in MOM_input_dict.keys():
-            if "value" in MOM_input_dict[key] and "forcing/" in MOM_input_dict[key]["value"]:
-                MOM_input_dict[key]["value"] = MOM_input_dict[key]["value"].replace(
-                    "forcing/", ""
-                )
-        for key in MOM_override_dict.keys():
-            if "value" in MOM_override_dict[key] and "forcing/" in MOM_override_dict[key]["value"]:
-                MOM_override_dict[key]["value"] = MOM_override_dict[key][
-                    "value"
-                ].replace("forcing/", "")
-        self.write_MOM_file(Path(Path(CESMPath) / "SourceMods/src.mom"), MOM_input_dict)
-        self.write_MOM_file(
-            Path(Path(CESMPath) / "SourceMods/src.mom"), MOM_override_dict
-        )
+        with open(CESMPath / "SourceMods/src.mom/MOM_override", "r") as f:
+            lines = f.readlines()
+            f.close()
+        with open(CESMPath / "SourceMods/src.mom/MOM_override", "w") as f:
+            for i in range(len(lines)):
+                lines[i] = lines[i].replace("forcing/", "")
+            f.writelines(lines)
+            f.close()
 
         # Make ESMF grid and save to inputdir
         rcg_logger.info("Make ESMF grid and save to inputdir")
@@ -329,71 +318,3 @@ class RegionalCaseGen:
             cwd=str(CESM_path),
         )
 
-    def read_MOM_file_as_dict(self, file_dir, filename):
-        """
-        Wraps the RM6 function to read a MOM file as a dictionary, without (cesm_tools) needing to create an experiment object
-        Parameters
-        ----------
-        file_dir : Path
-            Path to the MOM run directory
-        filename : str
-            Name of the file to read (MOM_override, MOM_input)
-        Returns
-        -------
-        dict
-            Dictionary of the MOM file
-         """
-        expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
-        return expt.read_MOM_file_as_dict(filename)
-
-    def write_MOM_file(self, file_dir, dict):
-        """
-        Wraps the RM6 function to write a MOM file that is a dictionary from read_MOM_file_as_dict, without (cesm_tools) needing to create an experiment object
-        Parameters
-        ----------
-        file_dir : Path
-            Path to the MOM run directory
-        dict : dict
-            dict of the file to write (MOM_override, MOM_input)
-        Returns
-        -------
-        none
-            
-        """
-        expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
-        return expt.write_MOM_file(dict)
-
-    def change_MOM_parameter(
-        self,
-        file_dir,
-        param_name,
-        param_value=None,
-        override=True,
-        comment=None,
-        delete=False,
-    ):
-        """
-        Wraps RM6 function to change a MOM parameter, without (cesm_tools) needing to create an experiment object, wraps read_MOM_file_as_dict and write_MOM_file
-        Parameters
-        ----------
-        file_dir : Path
-            Path to the MOM run directory
-        param_name : str
-            Name of the parameter to change
-        param_value : str, optional
-            Value to change the parameter to
-        override : bool, optional
-            Whether to override the parameter
-        comment : str, optional
-            Comment to add to the parameter
-        delete : bool, optional
-            Whether to delete the parameter (in MOM_override)
-        """
-        expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
-        expt.change_MOM_parameter(
-            param_name,
-            param_value=param_value,
-            override=override,
-            comment=comment,
-            delete=delete,
-        )
