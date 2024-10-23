@@ -5,6 +5,9 @@ from datetime import datetime
 import shutil
 import os
 import subprocess
+import logging
+
+rcg_logger = logging.Logger(__name__) # this should be replaced by a workflow utils
 
 
 class RegionalCaseGen:
@@ -159,6 +162,7 @@ class RegionalCaseGen:
         date_range,
         bathymetry_path,
         cyclic_x=False,
+
     ):
         """
         Given a regional-mom6 experiment object and a path to the CESM folder, this function makes all of the changes to the CESM configuration to get it to run with the regional configuration.
@@ -167,14 +171,14 @@ class RegionalCaseGen:
         nx = int(len(hgrid.nx) // 2)
         ny = int(len(hgrid.ny) // 2)
         # Copy the configuration files to the SourceMods folder
-        print(
+        rcg_logger.info(
             f"Copying input.nml, diag_table, MOM_input_and MOM_override to {CESMPath / 'SourceMods/src.mom'}"
         )
         for i in ["input.nml", "diag_table", "MOM_input", "MOM_override"]:
             shutil.copy(Path(mom_run_dir) / i, CESMPath / "SourceMods/src.mom")
 
-        # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs
-        print(
+        # Add NIGLOBAL and NJGLOBAL to MOM_override, and include INPUTDIR pointing to mom6 inputs - This can be replaced by the MOM_param functions once we have move it.
+        rcg_logger.info(
             f"Adding NIGLOBAL = {nx}, NJGLOBAL = {ny}, and INPUTDIR = {mom_input_dir} to MOM_override"
         )
         with open(CESMPath / "SourceMods/src.mom/MOM_override", "a") as f:
@@ -184,41 +188,18 @@ class RegionalCaseGen:
             f.close()
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
-        print("Removing references to MOM_layout in input.nml")
-        with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
-            lines = f.readlines()
-            f.close()
-
-        print("Add MOM_override to parameter_filename in input.nml")
-        with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
-            for i in range(len(lines)):
-                if "parameter_filename" in lines[i] and "MOM_layout" in lines[i]:
-                    lines[i] = "parameter_filename = 'MOM_input', 'MOM_override'"
-            f.writelines(lines)
-            f.close()
+        rcg_logger.info("Add MOM_override to parameter_filename in input.nml")
+        self.edit_input_nml_for_CESM(CESMPath, condition_strings=["MOM_layout", "parameter_filename"], new_string="parameter_filename = 'MOM_input', 'MOM_override'")
 
         # Move all of the forcing files out of the forcing directory to the main inputdir
-        print(
+        rcg_logger.info(
             "Move all of the forcing files out of the forcing directory to the main inputdir"
         )
         for i in mom_input_dir.glob("forcing/*"):
             shutil.move(i, mom_input_dir / i.name)
 
-        # Find and replace instances of forcing/ with nothing in the MOM_input file
-        print(
-            "Find and replace instances of forcing/ with nothing in the MOM_input file"
-        )
-        with open(CESMPath / "SourceMods/src.mom/MOM_input", "r") as f:
-            lines = f.readlines()
-            f.close()
-        with open(CESMPath / "SourceMods/src.mom/MOM_input", "w") as f:
-            for i in range(len(lines)):
-                lines[i] = lines[i].replace("forcing/", "")
-            f.writelines(lines)
-            f.close()
-
-        # Find and replace instances of forcing/ with nothing in the MOM_input file
-        print(
+        # Find and replace instances of forcing/ with nothing in the MOM_input file - This can be replaced by the MOM_param functions once we have move it.
+        rcg_logger.info(
             "Find and replace instances of forcing/ with nothing in the MOM_input file"
         )
         with open(CESMPath / "SourceMods/src.mom/MOM_override", "r") as f:
@@ -231,7 +212,7 @@ class RegionalCaseGen:
             f.close()
 
         # Make ESMF grid and save to inputdir
-        print("Make ESMF grid and save to inputdir")
+        rcg_logger.info("Make ESMF grid and save to inputdir")
         self.write_esmf_mesh(
             hgrid,
             xr.open_dataarray(bathymetry_path),
@@ -240,73 +221,27 @@ class RegionalCaseGen:
             cyclic_x=cyclic_x,
         )
 
+
+
         # Make xml changes
-        print("Make xml changes. Setting OCN_NX={}, OCN_NY={}".format(nx, ny))
-        print("MOM6_MEMORY_MODE=dynamic_symmetric")
-        print(
-            "OCN_DOMAIN_MESH, ICE_DOMAIN_MESH, MASK_MESH, MASK_GRID, OCN_GRID, ICE_GRID ={}".format(
-                mom_input_dir / "esmf_mesh.nc"
-            )
+        self.xmlchange(CESMPath, "OCN_NX", str(nx))
+        self.xmlchange(CESMPath, "OCN_NY", str(ny))
+        self.xmlchange(CESMPath, "MOM6_MEMORY_MODE", "dynamic_symmetric")
+        self.xmlchange(CESMPath, "OCN_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "ICE_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "MASK_MESH", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "MASK_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "OCN_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "ICE_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "RUN_REFDATE", str(date_range[0].strftime("%Y-%m-%d")))
+        self.xmlchange(
+            CESMPath, "RUN_STARTDATE", str(date_range[0].strftime("%Y-%m-%d"))
         )
-        print(
-            "RUN_REFDATE, RUN_STARTDATE = {}".format(date_range[0].strftime("%Y-%m-%d"))
-        )
-        subprocess.run(f"./xmlchange OCN_NX={nx}", shell=True, cwd=str(CESMPath))
-        subprocess.run(f"./xmlchange OCN_NY={ny}", shell=True, cwd=str(CESMPath))
-        subprocess.run(
-            f"./xmlchange MOM6_MEMORY_MODE=dynamic_symmetric",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange OCN_DOMAIN_MESH={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange ICE_DOMAIN_MESH={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange MASK_MESH={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange MASK_GRID={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange OCN_GRID={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange ICE_GRID={mom_input_dir / 'esmf_mesh.nc'}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-
-        subprocess.run(
-            f"./xmlchange RUN_REFDATE={date_range[0].strftime('%Y-%m-%d')}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-        subprocess.run(
-            f"./xmlchange RUN_STARTDATE={date_range[0].strftime('%Y-%m-%d')}",
-            shell=True,
-            cwd=str(CESMPath),
-        )
-
-        subprocess.run(f"./xmlchange PROJECT={project}", shell=True, cwd=str(CESMPath))
-        subprocess.run(
-            f"./xmlchange CHARGE_ACCOUNT={project}", shell=True, cwd=str(CESMPath)
-        )
+        self.xmlchange(CESMPath, "PROJECT", str(project))
+        self.xmlchange(CESMPath, "CHARGE_ACCOUNT", str(project))
 
         # Now make symlinks from the CESM directory to the mom input directory and the CESM run directory
-        print(
+        rcg_logger.info(
             "Make symlinks from the CESM directory to the mom input directory and the CESM run directory"
         )
         with CESMPath / "mom_input_directory" as link:
@@ -315,4 +250,51 @@ class RegionalCaseGen:
 
         return
 
-    # def regrid_marbl_forcing(expt,marbl_directory):
+
+    def edit_input_nml_for_CESM(self, CESMPath, condition_strings: list = ["MOM_layout", "parameter_filename"], new_string: str = "parameter_filename = 'MOM_input', 'MOM_override'"):
+        """
+        Remove reference to condition_strings in input.nml and adds the new_strong. The only reason to take this out of the setup_cesm function is to remove direct file changes from the main function.
+        Parameters
+        ----------
+        CESMPath : Path
+            Path to the CESM directory
+        condition_strings : list, optional
+            The strings that we are searching if a line already has, by default ["MOM_layout", "parameter_filename"]
+        new_string : str, optional
+            The new string to replace that line with, by default "parameter_filename = 'MOM_input', 'MOM_override'"
+        """
+        rcg_logger.info("Removing reference to MOM_layout in input.nml and add MOM_override to parameter_filename in input.nml")
+        with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
+            lines = f.readlines()
+            f.close()
+        rcg_logger.info("")
+        with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
+            for i in range(len(lines)):
+                if all(cond in lines[i]  for cond in condition_strings):
+                    rcg_logger.info(f"Modifying line: {lines[i].strip()}")
+                    lines[i] = new_string
+            f.writelines(lines)
+
+    def xmlchange(self, CESM_path, param_name, param_value):
+        """
+        Run the XML Change Script at the CESM_path arg with param_name and param_value
+        Parameters
+        ----------
+        CESM_path : Path
+            Path to the CESM directory
+        param_name : str
+            name of the parameter to change
+        param_value : str
+            value to change the parameter to
+        Returns
+        -------
+        subprocess.CompletedProcess
+            The result of the subprocess.run command
+        """
+        rcg_logger.info(f"XML Change: {param_name} to {param_value}!")
+        return subprocess.run(
+            f"./xmlchange {param_name}={param_value}",
+            shell=True,
+            cwd=str(CESM_path),
+        )
+
