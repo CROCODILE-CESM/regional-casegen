@@ -227,9 +227,10 @@ class RegionalCaseGen:
         total_number_of_points = nx * ny
         nodes=1
         pts_per_processor = total_number_of_points/ float(processors_per_node)
-        while not pts_per_processor < ideal_number_of_points_per_core_ceiling:
-            pts_per_processor = total_number_of_points / float(processors_per_node * nodes)
+        while pts_per_processor > ideal_number_of_points_per_core_ceiling:
             nodes = nodes+1
+            pts_per_processor = total_number_of_points / float(processors_per_node * nodes)
+            
         
         # Avoid one node for all other components in ocean_only mode
         self.xmlchange(CESMPath, "ROOTPE_OCN", str(processors_per_node))
