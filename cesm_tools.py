@@ -162,8 +162,7 @@ class RegionalCaseGen:
         date_range,
         bathymetry_path,
         cyclic_x=False,
-        processors_per_node=128,
-        ideal_number_of_points_per_core_ceiling = 800,
+
     ):
         """
         Given a regional-mom6 experiment object and a path to the CESM folder, this function makes all of the changes to the CESM configuration to get it to run with the regional configuration.
