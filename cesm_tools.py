@@ -192,18 +192,7 @@ class RegionalCaseGen:
         )
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
-        rcg_logger.info("Removing references to MOM_layout in input.nml")
-        with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
-            lines = f.readlines()
-            f.close()
-
-        rcg_logger.info("Add MOM_override to parameter_filename in input.nml")
-        with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
-            for i in range(len(lines)):
-                if "parameter_filename" in lines[i] and "MOM_layout" in lines[i]:
-                    lines[i] = "parameter_filename = 'MOM_input', 'MOM_override'"
-            f.writelines(lines)
-            f.close()
+        self.edit_input_nml_for_CESM(CESMPath, condition_strings=["MOM_layout", "parameter_filename"], new_string="parameter_filename = 'MOM_input', 'MOM_override'")
 
         # Move all of the forcing files out of the forcing directory to the main inputdir
         rcg_logger.info(
@@ -223,12 +212,12 @@ class RegionalCaseGen:
             Path(Path(CESMPath) / "SourceMods/src.mom"), "MOM_override"
         )
         for key in MOM_input_dict.keys():
-            if "forcing/" in MOM_input_dict[key]:
+            if "value" in MOM_input_dict[key] and "forcing/" in MOM_input_dict[key]["value"]:
                 MOM_input_dict[key]["value"] = MOM_input_dict[key]["value"].replace(
                     "forcing/", ""
                 )
         for key in MOM_override_dict.keys():
-            if "forcing/" in MOM_override_dict[key]:
+            if "value" in MOM_override_dict[key] and "forcing/" in MOM_override_dict[key]["value"]:
                 MOM_override_dict[key]["value"] = MOM_override_dict[key][
                     "value"
                 ].replace("forcing/", "")
@@ -274,8 +263,48 @@ class RegionalCaseGen:
 
         return
 
+
+    def edit_input_nml_for_CESM(self, CESMPath, condition_strings: list = ["MOM_layout", "parameter_filename"], new_string: str = "parameter_filename = 'MOM_input', 'MOM_override'"):
+        """
+        Remove reference to condition_strings in input.nml and adds the new_strong. The only reason to take this out of the setup_cesm function is to remove direct file changes from the main function.
+        Parameters
+        ----------
+        CESMPath : Path
+            Path to the CESM directory
+        condition_strings : list, optional
+            The strings that we are searching if a line already has, by default ["MOM_layout", "parameter_filename"]
+        new_string : str, optional
+            The new string to replace that line with, by default "parameter_filename = 'MOM_input', 'MOM_override'"
+        """
+        rcg_logger.info("Removing reference to MOM_layout in input.nml and add MOM_override to parameter_filename in input.nml")
+        with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
+            lines = f.readlines()
+            f.close()
+        rcg_logger.info("")
+        with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
+            for i in range(len(lines)):
+                if all(cond in lines[i]  for cond in condition_strings):
+                    rcg_logger.info(f"Modifying line: {lines[i].strip()}")
+                    lines[i] = new_string
+            f.writelines(lines)
+
     def xmlchange(self, CESM_path, param_name, param_value):
-        rcg_logger.info(f"XML Change {param_name} to {param_value}!")
+        """
+        Run the XML Change Script at the CESM_path arg with param_name and param_value
+        Parameters
+        ----------
+        CESM_path : Path
+            Path to the CESM directory
+        param_name : str
+            name of the parameter to change
+        param_value : str
+            value to change the parameter to
+        Returns
+        -------
+        subprocess.CompletedProcess
+            The result of the subprocess.run command
+        """
+        rcg_logger.info(f"XML Change: {param_name} to {param_value}!")
         return subprocess.run(
             f"./xmlchange {param_name}={param_value}",
             shell=True,
@@ -283,10 +312,36 @@ class RegionalCaseGen:
         )
 
     def read_MOM_file_as_dict(self, file_dir, filename):
+        """
+        Wraps the RM6 function to read a MOM file as a dictionary, without (cesm_tools) needing to create an experiment object
+        Parameters
+        ----------
+        file_dir : Path
+            Path to the MOM run directory
+        filename : str
+            Name of the file to read (MOM_override, MOM_input)
+        Returns
+        -------
+        dict
+            Dictionary of the MOM file
+         """
         expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
         return expt.read_MOM_file_as_dict(filename)
 
     def write_MOM_file(self, file_dir, dict):
+        """
+        Wraps the RM6 function to write a MOM file that is a dictionary from read_MOM_file_as_dict, without (cesm_tools) needing to create an experiment object
+        Parameters
+        ----------
+        file_dir : Path
+            Path to the MOM run directory
+        dict : dict
+            dict of the file to write (MOM_override, MOM_input)
+        Returns
+        -------
+        none
+            
+        """
         expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
         return expt.write_MOM_file(dict)
 
@@ -299,6 +354,23 @@ class RegionalCaseGen:
         comment=None,
         delete=False,
     ):
+        """
+        Wraps RM6 function to change a MOM parameter, without (cesm_tools) needing to create an experiment object, wraps read_MOM_file_as_dict and write_MOM_file
+        Parameters
+        ----------
+        file_dir : Path
+            Path to the MOM run directory
+        param_name : str
+            Name of the parameter to change
+        param_value : str, optional
+            Value to change the parameter to
+        override : bool, optional
+            Whether to override the parameter
+        comment : str, optional
+            Comment to add to the parameter
+        delete : bool, optional
+            Whether to delete the parameter (in MOM_override)
+        """
         expt = rm6.experiment.create_empty(mom_run_dir=file_dir)
         expt.change_MOM_parameter(
             param_name,
