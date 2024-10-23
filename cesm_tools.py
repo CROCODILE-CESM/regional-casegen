@@ -226,10 +226,10 @@ class RegionalCaseGen:
         # Load Balancing Math
         total_number_of_points = nx * ny
         nodes=1
-        pts_per_processor = total_number_of_points/ float(cores_per_node)
-        while pts_per_processor > ideal_number_of_points_per_core_ceiling:
+        pts_per_core = total_number_of_points/ float(cores_per_node)
+        while pts_per_core > ideal_number_of_points_per_core_ceiling:
             nodes = nodes+1
-            pts_per_processor = total_number_of_points / float(cores_per_node * nodes)
+            pts_per_core = total_number_of_points / float(cores_per_node * nodes)
             
         
         # Avoid one node for all other components in ocean_only mode
