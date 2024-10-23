@@ -162,6 +162,8 @@ class RegionalCaseGen:
         date_range,
         bathymetry_path,
         cyclic_x=False,
+        processors_per_node=128,
+        ideal_number_of_points_per_core_ceiling = 800,
 
     ):
         """
@@ -221,6 +223,18 @@ class RegionalCaseGen:
             cyclic_x=cyclic_x,
         )
 
+        # Load Balancing Math
+        total_number_of_points = nx * ny
+        nodes=1
+        pts_per_processor = total_number_of_points/ float(processors_per_node)
+        while not pts_per_processor < ideal_number_of_points_per_core_ceiling:
+            pts_per_processor = total_number_of_points / float(processors_per_node * nodes)
+            nodes = nodes+1
+        
+        # Avoid one node for all other components in ocean_only mode
+        self.xmlchange(CESMPath, "ROOTPE_OCN", str(processors_per_node))
+        # Set the number of processors
+        self.xmlchange(CESMPath, "NTASKS_OCN", nodes*processors_per_node)
 
 
         # Make xml changes
