@@ -245,9 +245,7 @@ class RegionalCaseGen:
         self.xmlchange(CESMPath, "OCN_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
         self.xmlchange(CESMPath, "ICE_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
         self.xmlchange(CESMPath, "MASK_MESH", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "MASK_GRID", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "OCN_GRID", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "ICE_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "OCN_GRID", "RegionalCaseGen")
         self.xmlchange(CESMPath, "RUN_REFDATE", str(date_range[0].strftime("%Y-%m-%d")))
         self.xmlchange(
             CESMPath, "RUN_STARTDATE", str(date_range[0].strftime("%Y-%m-%d"))
