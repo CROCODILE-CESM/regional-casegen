@@ -162,6 +162,8 @@ class RegionalCaseGen:
         date_range,
         bathymetry_path,
         cyclic_x=False,
+        cores_per_node=128,
+        ideal_number_of_points_per_core_ceiling = 800,
 
     ):
         """
@@ -221,6 +223,19 @@ class RegionalCaseGen:
             cyclic_x=cyclic_x,
         )
 
+        # Load Balancing Math
+        total_number_of_points = nx * ny
+        nodes=1
+        pts_per_core = total_number_of_points/ float(cores_per_node)
+        while pts_per_core > ideal_number_of_points_per_core_ceiling:
+            nodes = nodes+1
+            pts_per_core = total_number_of_points / float(cores_per_node * nodes)
+            
+        
+        # Avoid one node for all other components in ocean_only mode
+        self.xmlchange(CESMPath, "ROOTPE_OCN", str(cores_per_node))
+        # Set the number of processors
+        self.xmlchange(CESMPath, "NTASKS_OCN", nodes*cores_per_node)
 
 
         # Make xml changes
@@ -230,9 +245,7 @@ class RegionalCaseGen:
         self.xmlchange(CESMPath, "OCN_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
         self.xmlchange(CESMPath, "ICE_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
         self.xmlchange(CESMPath, "MASK_MESH", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "MASK_GRID", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "OCN_GRID", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "ICE_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "OCN_GRID", "RegCaseGen")
         self.xmlchange(CESMPath, "RUN_REFDATE", str(date_range[0].strftime("%Y-%m-%d")))
         self.xmlchange(
             CESMPath, "RUN_STARTDATE", str(date_range[0].strftime("%Y-%m-%d"))
