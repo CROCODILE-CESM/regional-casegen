@@ -5,9 +5,9 @@ from datetime import datetime
 import shutil
 import os
 import subprocess
-import logging
+from .utils import setup_logger
 
-rcg_logger = logging.Logger(__name__) # this should be replaced by a workflow utils
+rcg_logger = setup_logger(__name__) # this should be replaced by a workflow utils
 
 
 class RegionalCaseGen:
