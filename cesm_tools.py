@@ -5,9 +5,9 @@ from datetime import datetime
 import shutil
 import os
 import subprocess
-import logging
+from .utils import setup_logger
 
-rcg_logger = logging.Logger(__name__) # this should be replaced by a workflow utils
+rcg_logger = setup_logger(__name__)  # this should be replaced by a workflow utils
 
 
 class RegionalCaseGen:
@@ -162,7 +162,8 @@ class RegionalCaseGen:
         date_range,
         bathymetry_path,
         cyclic_x=False,
-
+        cores_per_node=128,
+        ideal_number_of_points_per_core_ceiling=800,
     ):
         """
         Given a regional-mom6 experiment object and a path to the CESM folder, this function makes all of the changes to the CESM configuration to get it to run with the regional configuration.
@@ -189,7 +190,11 @@ class RegionalCaseGen:
 
         # Remove references to MOM_layout in input.nml, as processor layouts are handled by CESM
         rcg_logger.info("Add MOM_override to parameter_filename in input.nml")
-        self.edit_input_nml_for_CESM(CESMPath, condition_strings=["MOM_layout", "parameter_filename"], new_string="parameter_filename = 'MOM_input', 'MOM_override'")
+        self.edit_input_nml_for_CESM(
+            CESMPath,
+            condition_strings=["MOM_layout", "parameter_filename"],
+            new_string="parameter_filename = 'MOM_input', 'MOM_override'",
+        )
 
         # Move all of the forcing files out of the forcing directory to the main inputdir
         rcg_logger.info(
@@ -221,7 +226,18 @@ class RegionalCaseGen:
             cyclic_x=cyclic_x,
         )
 
+        # Load Balancing Math
+        total_number_of_points = nx * ny
+        nodes = 1
+        pts_per_core = total_number_of_points / float(cores_per_node)
+        while pts_per_core > ideal_number_of_points_per_core_ceiling:
+            nodes = nodes + 1
+            pts_per_core = total_number_of_points / float(cores_per_node * nodes)
 
+        # Avoid one node for all other components in ocean_only mode
+        self.xmlchange(CESMPath, "ROOTPE_OCN", str(cores_per_node))
+        # Set the number of processors
+        self.xmlchange(CESMPath, "NTASKS_OCN", nodes * cores_per_node)
 
         # Make xml changes
         self.xmlchange(CESMPath, "OCN_NX", str(nx))
@@ -230,9 +246,7 @@ class RegionalCaseGen:
         self.xmlchange(CESMPath, "OCN_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
         self.xmlchange(CESMPath, "ICE_DOMAIN_MESH", str(mom_input_dir / "esmf_mesh.nc"))
         self.xmlchange(CESMPath, "MASK_MESH", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "MASK_GRID", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "OCN_GRID", str(mom_input_dir / "esmf_mesh.nc"))
-        self.xmlchange(CESMPath, "ICE_GRID", str(mom_input_dir / "esmf_mesh.nc"))
+        self.xmlchange(CESMPath, "OCN_GRID", "RegCaseGen")
         self.xmlchange(CESMPath, "RUN_REFDATE", str(date_range[0].strftime("%Y-%m-%d")))
         self.xmlchange(
             CESMPath, "RUN_STARTDATE", str(date_range[0].strftime("%Y-%m-%d"))
@@ -250,8 +264,12 @@ class RegionalCaseGen:
 
         return
 
-
-    def edit_input_nml_for_CESM(self, CESMPath, condition_strings: list = ["MOM_layout", "parameter_filename"], new_string: str = "parameter_filename = 'MOM_input', 'MOM_override'"):
+    def edit_input_nml_for_CESM(
+        self,
+        CESMPath,
+        condition_strings: list = ["MOM_layout", "parameter_filename"],
+        new_string: str = "parameter_filename = 'MOM_input', 'MOM_override'",
+    ):
         """
         Remove reference to condition_strings in input.nml and adds the new_strong. The only reason to take this out of the setup_cesm function is to remove direct file changes from the main function.
         Parameters
@@ -263,14 +281,16 @@ class RegionalCaseGen:
         new_string : str, optional
             The new string to replace that line with, by default "parameter_filename = 'MOM_input', 'MOM_override'"
         """
-        rcg_logger.info("Removing reference to MOM_layout in input.nml and add MOM_override to parameter_filename in input.nml")
+        rcg_logger.info(
+            "Removing reference to MOM_layout in input.nml and add MOM_override to parameter_filename in input.nml"
+        )
         with open(CESMPath / "SourceMods/src.mom/input.nml", "r") as f:
             lines = f.readlines()
             f.close()
         rcg_logger.info("")
         with open(CESMPath / "SourceMods/src.mom/input.nml", "w") as f:
             for i in range(len(lines)):
-                if all(cond in lines[i]  for cond in condition_strings):
+                if all(cond in lines[i] for cond in condition_strings):
                     rcg_logger.info(f"Modifying line: {lines[i].strip()}")
                     lines[i] = new_string
             f.writelines(lines)
@@ -297,4 +317,3 @@ class RegionalCaseGen:
             shell=True,
             cwd=str(CESM_path),
         )
-
