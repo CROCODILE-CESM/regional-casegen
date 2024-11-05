@@ -1,3 +1,7 @@
+"""
+This module (cesm_tools) implements the RegionalCaseGen class, and contains a logger called "rcg_logger"
+"""
+
 import numpy as np
 import xarray as xr
 from pathlib import Path
@@ -7,12 +11,26 @@ import os
 import subprocess
 from .utils import setup_logger
 
-rcg_logger = setup_logger(__name__)  # this should be replaced by a workflow utils
+rcg_logger = setup_logger(__name__)  # this should be replaced by crr utils
 
 
 class RegionalCaseGen:
+    """
+        This class is the CESM setup class for the Crocodile Regional Ruckus. It stores all variables and functions used to setup the cesm, including a function to generate an ESMF mesh file.
 
+
+        Variables:
+        None
+
+        Functions:
+
+        1. ``__init__`` : Initializes the RegionalCaseGen object with no required parameters
+        2. ``write_esmf_mesh`` : Creates an ESMF mesh file from the Hgrid and Bathymetry
+        3. ``setup_cesm`` : Connects the regional-mom6 input files to the CESM case & sets defaults
+
+    """
     def __init__(self):
+        
         return
 
     def write_esmf_mesh(self, hgrid, bathymetry, save_path, title=None, cyclic_x=False):
@@ -21,7 +39,6 @@ class RegionalCaseGen:
 
         This function is adapted from Alper Altuntas' NCAR/mom6_bathy library.
         Modifications allow the function to work in isolation from the rest of the package.
-
 
         Parameters
         ----------
@@ -141,6 +158,9 @@ class RegionalCaseGen:
         ds.to_netcdf(save_path, mode="w")
 
     def setup_cesm(self, expt, CESMPath, project, cyclic_x=False):
+        """
+        Wraps setup_cesm_explicit to explictly state what variables we need.
+        """
         return self.setup_cesm_explicit(
             expt.hgrid,
             CESMPath,
@@ -167,6 +187,43 @@ class RegionalCaseGen:
     ):
         """
         Given a regional-mom6 experiment object and a path to the CESM folder, this function makes all of the changes to the CESM configuration to get it to run with the regional configuration.
+        It: 
+
+        1. Copies the MOM6 configuration files to the SourceMods folder
+        2. Adds NIGLOBAL and NJGLOBAL to MOM_override, and includes INPUTDIR pointing to mom6 inputs
+        3. Removes references to MOM_layout in input.nml, as processor layouts are handled by CESM
+        4. Moves all of the forcing files out of the forcing directory to the main inputdir
+        5. Finds and replaces instances of forcing/ with nothing in the MOM_input file
+        6. Makes ESMF grid and saves to inputdir
+        7. Sets Load Balancing Information
+        8. Makes xml changes
+        9. Makes symlinks from the CESM directory to the mom input directory and the CESM run directory
+
+        Parameters
+        ----------
+        hgrid : xarray.Dataset
+            The horizontal grid
+        CESMPath : Path
+            Path to the CESM directory
+        project : str
+            The project code
+        mom_input_dir : Path
+            Path to the mom6 input directory
+        mom_run_dir : Path 
+            Path to the mom6 run directory
+        date_range : list
+            List of two datetime objects, the start and end date of the run
+        bathymetry_path : Path
+            Path to the bathymetry file
+        cyclic_x : bool, optional
+            Whether the x direction is cyclic, by default False
+        cores_per_node : int, optional
+            The number of cores per node, by default 128 on Derecho
+        ideal_number_of_points_per_core_ceiling : int, optional
+            The ideal number of points per core ceiling, by default 800 on Derecho
+        Returns
+        -------
+        None
         """
 
         nx = int(len(hgrid.nx) // 2)
@@ -272,6 +329,7 @@ class RegionalCaseGen:
     ):
         """
         Remove reference to condition_strings in input.nml and adds the new_strong. The only reason to take this out of the setup_cesm function is to remove direct file changes from the main function.
+        
         Parameters
         ----------
         CESMPath : Path
@@ -298,6 +356,7 @@ class RegionalCaseGen:
     def xmlchange(self, CESM_path, param_name, param_value):
         """
         Run the XML Change Script at the CESM_path arg with param_name and param_value
+        
         Parameters
         ----------
         CESM_path : Path
