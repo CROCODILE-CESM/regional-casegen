@@ -16,21 +16,22 @@ rcg_logger = setup_logger(__name__)  # this should be replaced by crr utils
 
 class RegionalCaseGen:
     """
-        This class is the CESM setup class for the Crocodile Regional Ruckus. It stores all variables and functions used to setup the cesm, including a function to generate an ESMF mesh file.
+    This class is the CESM setup class for the Crocodile Regional Ruckus. It stores all variables and functions used to setup the cesm, including a function to generate an ESMF mesh file.
 
 
-        Variables:
-        None
+    Variables:
+    None
 
-        Functions:
+    Functions:
 
-        1. ``__init__`` : Initializes the RegionalCaseGen object with no required parameters
-        2. ``write_esmf_mesh`` : Creates an ESMF mesh file from the Hgrid and Bathymetry
-        3. ``setup_cesm`` : Connects the regional-mom6 input files to the CESM case & sets defaults
+    1. ``__init__`` : Initializes the RegionalCaseGen object with no required parameters
+    2. ``write_esmf_mesh`` : Creates an ESMF mesh file from the Hgrid and Bathymetry
+    3. ``setup_cesm`` : Connects the regional-mom6 input files to the CESM case & sets defaults
 
     """
+
     def __init__(self):
-        
+
         return
 
     def write_esmf_mesh(self, hgrid, bathymetry, save_path, title=None, cyclic_x=False):
@@ -187,7 +188,7 @@ class RegionalCaseGen:
     ):
         """
         Given a regional-mom6 experiment object and a path to the CESM folder, this function makes all of the changes to the CESM configuration to get it to run with the regional configuration.
-        It: 
+        It:
 
         1. Copies the MOM6 configuration files to the SourceMods folder
         2. Adds NIGLOBAL and NJGLOBAL to MOM_override, and includes INPUTDIR pointing to mom6 inputs
@@ -209,7 +210,7 @@ class RegionalCaseGen:
             The project code
         mom_input_dir : Path
             Path to the mom6 input directory
-        mom_run_dir : Path 
+        mom_run_dir : Path
             Path to the mom6 run directory
         date_range : list
             List of two datetime objects, the start and end date of the run
@@ -329,7 +330,7 @@ class RegionalCaseGen:
     ):
         """
         Remove reference to condition_strings in input.nml and adds the new_strong. The only reason to take this out of the setup_cesm function is to remove direct file changes from the main function.
-        
+
         Parameters
         ----------
         CESMPath : Path
@@ -356,7 +357,7 @@ class RegionalCaseGen:
     def xmlchange(self, CESM_path, param_name, param_value):
         """
         Run the XML Change Script at the CESM_path arg with param_name and param_value
-        
+
         Parameters
         ----------
         CESM_path : Path
